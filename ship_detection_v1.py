@@ -98,16 +98,85 @@ import model
 
 #in_size = (1,768,768,3)
 m = model.unet(input_size = np.shape(X_train)[1:])
-opt = Adam(lr=1E-5, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
+#opt = Adam(lr=1E-5, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
 
 BATCH_SIZE = 1
+
+#weights_path = PATH
+
+checkpoint = ModelCheckpoint(PATH + "checkpoints.out", monitor='accuracy', 
+                             verbose=1, save_best_only=True, mode='max')
+
+csv_logger = CSVLogger(PATH + "log.out", append=True, separator=';')
+
+earlystopping = EarlyStopping(monitor = 'accuracy', verbose = 1,
+                              min_delta = 0.01, patience = 3, mode = 'max')
+
+callbacks_list = [checkpoint, csv_logger, earlystopping]
 
 results = m.fit_generator(image_gen(df_train),
                           epochs = 5, 
                           steps_per_epoch = 10,
                           validation_data = image_gen(df_test), 
-                          validation_steps = 10)
+                          validation_steps = 10,
+                          callbacks = callbacks_list,
+                          workers = 1)
 m.save('Model.h5')
+
+#%% predict 
+
+from keras import models
+
+m = models.load_model('C:\\Users\\comp\\Documents\\ship_detection\\Model.h5')
+
+def plot_mask(mask, alpha = 1):
+    m = np.reshape(mask[0],(768,768))
+    plt.imshow(m, alpha = alpha)
+    
+def plot_im(image):
+    plt.imshow(image[0])
+    
+def plot_overlay(image, mask):
+    plot_im(image)
+    plot_mask(mask, alpha = 0.3)
+    
+    
+from skimage.util import montage
+
+test_gen = image_gen(df_test)
+plot_overlay(*next(test_gen))
+
+
+img_m = X_test
+mask_m = y_test[:,:,:,0]
+out_m = m.predict(X_test)[:,:,:,0]
+for i in np.arange(3):
+    X_im, y_mask = next(test_gen)
+    out_m = np.append(out_m, m.predict(X_im)[:,:,:,0], axis = 0)
+    img_m = np.append(img_m, X_im, axis = 0)
+    mask_m = np.append(mask_m, y_mask[:,:,:,0], axis = 0)
+    print(i)
+
+mont_img = np.stack((montage(img_m[:,:,:,0]),
+                 montage(img_m[:,:,:,1]),
+                 montage(img_m[:,:,:,2])), axis = -1)
+mont_mask = montage(mask_m)
+mont_pred = montage(out_m)
+    
+
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.imshow(mont_img)
+ax1.imshow(mont_mask, alpha = 0.9)
+ax1.set_title('Encoded Pixels')
+
+ax2.imshow(mont_img)
+ax2.imshow(mont_pred, alpha = 0.9)
+ax2.set_title('Predicted Mask')
+
+
+
+
+    
 
 
     
